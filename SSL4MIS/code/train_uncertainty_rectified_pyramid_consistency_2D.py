@@ -29,7 +29,7 @@ from networks.net_factory import net_factory
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str,
-                    default='/home/mohamad/Masterarbeit/SSL4MIS/data/LiTS', help='Name of Experiment')
+                    default='../data/LiTS_sample', help='Name of Experiment')
 parser.add_argument('--exp', type=str,
                     default='ACDC/Uncertainty_Rectified_Pyramid_Consistency', help='experiment_name')
 parser.add_argument('--model', type=str,
