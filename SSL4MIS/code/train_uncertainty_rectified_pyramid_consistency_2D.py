@@ -29,14 +29,14 @@ from networks.net_factory import net_factory
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str,
-                    default='../data/LiTS_sample', help='Name of Experiment')
+                    default='SSL4MIS/code/data/LiTS_sample', help='Name of Experiment')
 parser.add_argument('--exp', type=str,
                     default='ACDC/Uncertainty_Rectified_Pyramid_Consistency', help='experiment_name')
 parser.add_argument('--model', type=str,
                     default='unet_urpc', help='model_name')
 parser.add_argument('--max_iterations', type=int,
                     default=30000, help='maximum epoch number to train')
-parser.add_argument('--batch_size', type=int, default=24,
+parser.add_argument('--batch_size', type=int, default=2,
                     help='batch_size per gpu')
 parser.add_argument('--deterministic', type=int,  default=1,
                     help='whether use deterministic training')
@@ -49,9 +49,9 @@ parser.add_argument('--num_classes', type=int,  default=4,
                     help='output channel of network')
 
 # label and unlabel
-parser.add_argument('--labeled_bs', type=int, default=12,
+parser.add_argument('--labeled_bs', type=int, default=1,
                     help='labeled_batch_size per gpu')
-parser.add_argument('--labeled_num', type=int, default=7,
+parser.add_argument('--labeled_num', type=int, default=1,
                     help='labeled data')
 # costs
 parser.add_argument('--consistency', type=float,
@@ -62,19 +62,14 @@ args = parser.parse_args()
 
 
 def patients_to_slices(dataset, patiens_num):
-    if "LiTS" in dataset:
-                 ref_dict = {"3": 68, "7": 136,
-                    "14": 256, "21": 396, "28": 512, "35": 664, "140": 1312}
-    elif "ACDC" in dataset:
-        ref_dict = {"3": 68, "7": 136,
-                    "14": 256, "21": 396, "28": 512, "35": 664, "140": 1312}
+    if "LiTS" in dataset or "ACDC" in dataset:
+        ref_dict = {"3": 68, "7": 136, "14": 256, "21": 396, "28": 512, "35": 664, "140": 1312}
     elif "Prostate" in dataset:
-        ref_dict = {"2": 27, "4": 53, "8": 120,
-                    "12": 179, "16": 256, "21": 312, "42": 623}
+        ref_dict = {"2": 27, "4": 53, "8": 120, "12": 179, "16": 256, "21": 312, "42": 623}
     else:
         print("Error")
         return 0
-    return ref_dict[str(patiens_num)]
+    return ref_dict.get(str(patiens_num), patiens_num)
 
 
 def get_current_consistency_weight(epoch):

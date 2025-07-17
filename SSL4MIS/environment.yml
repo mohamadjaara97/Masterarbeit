@@ -416,5 +416,6 @@ dependencies:
   - zstd=1.4.9
   - medpy=0.5.2
   - batchgenerators=0.25.1
+  - augmentations=0.0.1
   - pip:
     - opencv-python==4.5.5.62
