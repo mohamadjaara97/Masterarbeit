@@ -241,7 +241,7 @@ dependencies:
   - notebook=6.4.5
   - numba=0.54.1
   - numexpr=2.7.3
-  - numpy<2
+  - numpy=1.23.5
   - numpydoc=1.1.0
   - olefile=0.46
   - openh264=2.1.1
@@ -414,8 +414,8 @@ dependencies:
   - zope.event=4.5.0
   - zope.interface=5.4.0
   - zstd=1.4.9
-  - medpy=0.5.2
   - batchgenerators=0.25.1
   - pip:
     - opencv-python==4.5.5.62
     - albumentations
+    - medpy
