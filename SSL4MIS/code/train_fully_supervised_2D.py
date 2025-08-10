@@ -20,6 +20,9 @@ from torchvision import transforms
 from torchvision.utils import make_grid
 from tqdm import tqdm
 
+import mlflow
+from datetime import datetime
+
 from dataloaders import utils
 from dataloaders.dataset import BaseDataSets, RandomGenerator
 from networks.net_factory import net_factory
@@ -28,7 +31,7 @@ from val_2D import test_single_volume, test_single_volume_ds
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str,
-                    default='../data/ACDC', help='Name of Experiment')
+                    default='../Masterarbeit/SSL4MIS/code/data/LiTS', help='Name of Experiment')
 parser.add_argument('--exp', type=str,
                     default='ACDC/Fully_Supervised', help='experiment_name')
 parser.add_argument('--model', type=str,
@@ -36,7 +39,7 @@ parser.add_argument('--model', type=str,
 parser.add_argument('--num_classes', type=int,  default=4,
                     help='output channel of network')
 parser.add_argument('--max_iterations', type=int,
-                    default=30000, help='maximum epoch number to train')
+                    default=5000, help='maximum epoch number to train')
 parser.add_argument('--batch_size', type=int, default=24,
                     help='batch_size per gpu')
 parser.add_argument('--deterministic', type=int,  default=1,
@@ -46,16 +49,18 @@ parser.add_argument('--base_lr', type=float,  default=0.01,
 parser.add_argument('--patch_size', type=list,  default=[256, 256],
                     help='patch size of network input')
 parser.add_argument('--seed', type=int,  default=1337, help='random seed')
-parser.add_argument('--labeled_num', type=int, default=50,
+parser.add_argument('--labeled_num', type=int, default=150,
                     help='labeled data')
+parser.add_argument('--data_percentage', type=float, default=0.2,
+                    help='percentage of total data to use (0.2 = 20%%)')
 args = parser.parse_args()
 
 
 def patients_to_slices(dataset, patiens_num):
     ref_dict = None
-    if "ACDC" in dataset:
+    if "LiTS" in dataset or "ACDC" in dataset:
         ref_dict = {"3": 68, "7": 136,
-                    "14": 256, "21": 396, "28": 512, "35": 664, "140": 1312}
+                    "14": 256, "21": 396, "28": 512, "35": 664, "140": 1312,"150": 4500}
     elif "Prostate":
         ref_dict = {"2": 27, "4": 53, "8": 120,
                     "12": 179, "16": 256, "21": 312, "42": 623}
@@ -73,10 +78,27 @@ def train(args, snapshot_path):
     labeled_slice = patients_to_slices(args.root_path, args.labeled_num)
 
     model = net_factory(net_type=args.model, in_chns=1, class_num=num_classes)
-    db_train = BaseDataSets(base_dir=args.root_path, split="train", num=labeled_slice, transform=transforms.Compose([
+     # Load full datasets
+    db_train_full = BaseDataSets(base_dir=args.root_path, split="train", num=None, transform=transforms.Compose([
         RandomGenerator(args.patch_size)
     ]))
-    db_val = BaseDataSets(base_dir=args.root_path, split="val")
+    db_val_full = BaseDataSets(base_dir=args.root_path, split="val")
+    
+    # Calculate 20% of total data
+    total_train_slices = len(db_train_full)
+    total_val_slices = len(db_val_full)
+    
+    # Use only specified percentage of training data
+    train_subset_size = int(total_train_slices * args.data_percentage)
+    val_subset_size = int(total_val_slices * args.data_percentage)
+    
+    # Create subsets using torch.utils.data.Subset
+    from torch.utils.data import Subset
+    train_indices = list(range(train_subset_size))
+    val_indices = list(range(val_subset_size))
+    
+    db_train = Subset(db_train_full, train_indices)
+    db_val = Subset(db_val_full, val_indices)
 
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)
@@ -130,6 +152,13 @@ def train(args, snapshot_path):
                 'iteration %d : loss : %f, loss_ce: %f, loss_dice: %f' %
                 (iter_num, loss.item(), loss_ce.item(), loss_dice.item()))
 
+            mlflow.log_metric('lr', lr_, step=iter_num)
+            mlflow.log_metric('total_loss', loss.item(), step=iter_num)
+            mlflow.log_metric('loss_ce', loss_ce.item(), step=iter_num)
+            mlflow.log_metric('loss_dice', loss_dice.item(), step=iter_num)
+
+          
+
             if iter_num % 20 == 0:
                 image = volume_batch[1, 0:1, :, :]
                 writer.add_image('train/Image', image, iter_num)
@@ -154,11 +183,20 @@ def train(args, snapshot_path):
                     writer.add_scalar('info/val_{}_hd95'.format(class_i+1),
                                       metric_list[class_i, 1], iter_num)
 
+                mlflow.log_metric(f'val_{class_i+1}_dice', metric_list[class_i, 0], step=iter_num)
+                mlflow.log_metric(f'val_{class_i+1}_hd95', metric_list[class_i, 1], step=iter_num)                      
+
                 performance = np.mean(metric_list, axis=0)[0]
 
                 mean_hd95 = np.mean(metric_list, axis=0)[1]
                 writer.add_scalar('info/val_mean_dice', performance, iter_num)
                 writer.add_scalar('info/val_mean_hd95', mean_hd95, iter_num)
+
+                mlflow.log_metric('val_mean_dice', performance, step=iter_num)
+                mlflow.log_metric('val_mean_hd95', mean_hd95, step=iter_num)
+
+                
+
 
                 if performance > best_performance:
                     best_performance = performance
@@ -169,6 +207,9 @@ def train(args, snapshot_path):
                                              '{}_best_model.pth'.format(args.model))
                     torch.save(model.state_dict(), save_mode_path)
                     torch.save(model.state_dict(), save_best)
+
+                    mlflow.log_artifact(save_mode_path)
+                    mlflow.log_artifact(save_best)
 
                 logging.info(
                     'iteration %d : mean_dice : %f mean_hd95 : %f' % (iter_num, performance, mean_hd95))
@@ -202,17 +243,20 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    snapshot_path = "../model/{}_{}_labeled/{}".format(
-        args.exp, args.labeled_num, args.model)
+    snapshot_path = "/home/sc.uni-leipzig.de/mj49xire/model/{}_{}_labeled/{}_{}".format(
+        args.exp, args.labeled_num, args.model, datetime.now().strftime('%Y%m%d_%H%M%S'))
     if not os.path.exists(snapshot_path):
         os.makedirs(snapshot_path)
     if os.path.exists(snapshot_path + '/code'):
         shutil.rmtree(snapshot_path + '/code')
-    shutil.copytree('.', snapshot_path + '/code',
-                    shutil.ignore_patterns(['.git', '__pycache__']))
+    shutil.ignore_patterns(['.git', '__pycache__', snapshot_path.split('/')[-1]])
+
 
     logging.basicConfig(filename=snapshot_path+"/log.txt", level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     logging.info(str(args))
-    train(args, snapshot_path)
+    with mlflow.start_run(run_name=snapshot_path):
+      for arg in vars(args):
+        mlflow.log_param(arg, getattr(args, arg))
+      train(args, snapshot_path)

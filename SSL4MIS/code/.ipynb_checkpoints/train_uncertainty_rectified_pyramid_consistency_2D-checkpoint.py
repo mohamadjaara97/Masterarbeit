@@ -6,7 +6,6 @@ import shutil
 import sys
 import time
 import glob
-from datetime import datetime
 
 import numpy as np
 import torch
@@ -305,8 +304,7 @@ def train(args, snapshot_path):
 
 
 if __name__ == "__main__":
-    unique_run_name = f"{args.exp}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    with mlflow.start_run(run_name=unique_run_name):
+    with mlflow.start_run(run_name=args.exp):
         if not args.deterministic:
             cudnn.benchmark = True
             cudnn.deterministic = False

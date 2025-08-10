@@ -106,14 +106,14 @@ def Inference(FLAGS):
         image_list = f.readlines()
     image_list = sorted([item.replace('\n', '').split(".")[0]
                          for item in image_list])
-    test_save_path = "{}/predictions_new/".format(FLAGS.model_test)
+    test_save_path = "{}/predictions/".format(FLAGS.model_test)
     if os.path.exists(test_save_path):
         shutil.rmtree(test_save_path)
     os.makedirs(test_save_path)
     net = net_factory(net_type=FLAGS.model, in_chns=1,
                       class_num=FLAGS.num_classes)
     save_mode_path = os.path.join(
-        FLAGS.model_test, '{}_best_model.pth'.format(FLAGS.model))
+        FLAGS.model_test, 'iter_15000.pth')
     net.load_state_dict(torch.load(save_mode_path))
     print("init weight from {}".format(save_mode_path))
     net.eval()

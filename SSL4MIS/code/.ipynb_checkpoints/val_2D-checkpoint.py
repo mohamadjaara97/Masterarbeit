@@ -17,6 +17,7 @@ def calculate_metric_percase(pred, gt):
     else:
         # Both have foreground pixels - calculate metrics
         try:
+            print("Both pred and gt are not empty")
             dice = metric.binary.dc(pred, gt)
             hd95 = metric.binary.hd95(pred, gt)
             return dice, hd95
@@ -41,7 +42,7 @@ def test_single_volume(image, label, net, classes, patch_size=[256, 256]):
                 net(input), dim=1), dim=1).squeeze(0)
             out = out.cpu().detach().numpy()
             pred = zoom(out, (x / patch_size[0], y / patch_size[1]), order=0)
-            prediction = pred
+            prediction[ind] = pred
     metric_list = []
     for i in range(1, classes):
         metric_list.append(calculate_metric_percase(
@@ -72,48 +73,3 @@ def test_single_volume_ds(image, label, net, classes, patch_size=[256, 256]):
         metric_list.append(calculate_metric_percase(
             prediction == i, label == i))
     return metric_list
-
-def test_single_volume_new(image, label, net, classes, patch_size=[256, 256]):
-    image, label = image.squeeze(0).cpu().detach(
-    ).numpy(), label.squeeze(0).cpu().detach().numpy()
-    prediction = np.zeros_like(label)
-    if image.ndim == 3:
-        for ind in range(image.shape[0]):
-            slice = image[ind, :, :]
-            x, y = slice.shape
-            slice_resized = zoom(slice, (256 / x, 256 / y), order=0)
-            input = torch.from_numpy(slice_resized).unsqueeze(0).unsqueeze(0).float().cuda()
-            net.eval()
-            with torch.no_grad():
-                out_main = net(input)
-                if isinstance(out_main, tuple):
-                    out_main = out_main[0]
-                out = torch.argmax(torch.softmax(out_main, dim=1), dim=1).squeeze(0)
-                out = out.cpu().detach().numpy()
-                pred = zoom(out, (x / 256, y / 256), order=0)
-                prediction[ind] = pred
-    elif image.ndim == 2:
-        slice = image
-        x, y = slice.shape
-        slice_resized = zoom(slice, (256 / x, 256 / y), order=0)
-        input = torch.from_numpy(slice_resized).unsqueeze(0).unsqueeze(0).float().cuda()
-        net.eval()
-        with torch.no_grad():
-            out_main = net(input)
-            if isinstance(out_main, tuple):
-                out_main = out_main[0]
-            out = torch.argmax(torch.softmax(out_main, dim=1), dim=1).squeeze(0)
-            out = out.cpu().detach().numpy()
-            pred = zoom(out, (x / 256, y / 256), order=0)
-            prediction = pred  # prediction shape should match label
-    else:
-        raise ValueError(f"Unexpected image shape: {image.shape}")
-
-    first_metric = calculate_metric_percase(prediction == 1, label == 1)
-    second_metric = calculate_metric_percase(prediction == 2, label == 2)
-    third_metric = calculate_metric_percase(prediction == 3, label == 3)
-
-    avg_metric = [first_metric + second_metric + third_metric / 3]
-    return avg_metric
-
-
